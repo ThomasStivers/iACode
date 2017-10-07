@@ -4,8 +4,13 @@
 #
 # The traditional first project a coder writes in a new language.
 
+# The sys module contains command line arguments.
+import sys
+
 def hello(name="world"):
 	"""In python functions are typically documented with a documentation string which can be reached from within code. This one will be found in the hello.__doc__ property"""
+	if len(sys.argv) == 2:
+		name = sys.argv[1]
 	print "Hello %s!" % name
 
 def helloName():
