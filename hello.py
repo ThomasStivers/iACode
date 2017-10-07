@@ -1,8 +1,11 @@
 # Hello world!
+# Copyright (C) 2017 Thomas Stivers
+# Released under the GNU Public License Version 2.
+#
 # The traditional first project a coder writes in a new language.
 
 def hello(name="world"):
-	"""In python functions are typically documented with a documentation string which can be reached from within code."""
+	"""In python functions are typically documented with a documentation string which can be reached from within code. This one will be found in the hello.__doc__ property"""
 	print "Hello %s!" % name
 
 def helloName():
