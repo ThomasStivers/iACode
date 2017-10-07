@@ -27,16 +27,16 @@ if __name__ == "__main__":
 	helloName()
 
 # Sample output
-
+#
 # Script started on Sat, Oct  7, 2017  7:45:27 AM
-
+#
 # thoma@disco-stu ~/git/iACode
 # $ python hello.py
 # Hello world!
 # What is your name?
 # Thomas
 # Hello Thomas!
-
+#
 # thoma@disco-stu ~/git/iACode
 # $ python
 # Python 2.7.13 (default, Mar 13 2017, 20:56:15)
@@ -57,9 +57,9 @@ if __name__ == "__main__":
 # Thomas
 # Hello Thomas!
 # >>> exit()
-
+#
 # thoma@disco-stu ~/git/iACode
 # $ exit
 # exit
-
+#
 # Script done on Sat, Oct	 7, 2017  7:47:54 AM
