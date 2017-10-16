@@ -11,13 +11,11 @@ def hello(name="world"):
 	"""In python functions are typically documented with a documentation string which can be reached from within code. This one will be found in the hello.__doc__ property"""
 	if len(sys.argv) == 2:
 		name = sys.argv[1]
-	print "Hello %s!" % name
+	print ("Hello {0}!".format(name))
 
 def helloName():
 	"""Gets a name from the user and passes it to the hello() function."""
-	name = ""
-	print "What is your name?"
-	name = raw_input()
+	name = raw_input("What is your name? ")
 	hello(name)
 
 # In python code can be imported or run directly. If the __name__ variable is
