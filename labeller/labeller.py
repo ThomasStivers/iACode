@@ -120,6 +120,7 @@ class Labels(list):
 						elif aisle in [11, 15, 16]: minBay = 5
 						elif aisle in [12, 13, 14]: minBay = 6
 						else: minBay = 1
+						if aisle == 22 and type == floor: slots = list("ABCD")
 					elif type in boxes:
 						slots = list("ABCDEF")
 						minBay = 1
@@ -135,14 +136,13 @@ class Labels(list):
 						if aisle == 27: slots = list("ABCD")
 						if aisle == 28: slots = list("ABC")
 					for bay in xrange(minBay, maxBay+1): # For each bay loop over all the levels.
-						if type == floor:
-							if bay == 10: continue
+						if type in pallets:
+							if bay == 10 and (type == floor or aisle == 22): continue
+							if bay == 17: continue
 						if type in boxes:
 							if bay == 0: continue
 							if type == "M" and aisle == 0: continue
 						for slot in slots: # For each type of each bay on each aisle loop over all slots.
-							if type in ["F", "R"] and bay == 17: # There are floor level tunnels at bays 20 and 33 that are 2 levels high.
-								continue
 							l = Label(type=type, aisle=aisle, bay=bay, slot=slot, building=building)
 							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
 								continue
