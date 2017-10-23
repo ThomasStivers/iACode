@@ -11,7 +11,7 @@ parser.add_argument("-e", "--expression", default=None, help="A regular expressi
 parser.add_argument("-V", "--version", action="version", version="2017.10")
 
 class Label:
-
+	"""Represents a location label for a DS warehouse."""
 	def __init__(self, type=None, aisle=None, bay=None, level=None, slot=None, building=None, separator="-"):
 		self.building = building
 		self.separator = separator
@@ -22,6 +22,7 @@ class Label:
 		self.slot = slot
 
 	def __str__(self):
+		"""Diferent buildings have different format templates for their labels. This function returns a human readable string customized for the building."""
 		if self.building == "TLR":
 			template = "{building}{separator}{aisle:02d}{separator}{bay:02d}{separator}{level}{separator}{slot:02d}"
 		elif self.building in ("AF", "402", "MC", "225", "BULK", "220"):
@@ -37,10 +38,13 @@ class Label:
 		)
 
 class Labels(list):
+	"""This class has a generator to create lists of labels with the specific conditions for a given building."""
 	def __init__(self, columns=6):
+		"""When a Labels object is converted to a string it can have one or multiple columns."""
 		self.columns = columns
 
 	def __str__(self):
+		"""Makes a string representation of multiple labels with the given number of columns."""
 		lines = []
 		line = []
 		for i in xrange(0, len(self), self.columns):
@@ -55,6 +59,7 @@ class Labels(list):
 		return "\n".join(lines)
 
 	def generate(self, building, expression=None):
+		"""Creates the list of labels for a given building, but only if the labels match the regular expression."""
 		if expression != None:
 			regexp = re.compile(expression, re.IGNORECASE)
 		if building == "TLR":
@@ -81,6 +86,7 @@ class Labels(list):
 							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
 								continue
 							self.append(l)
+
 		if building in ("AF", "402"):
 			floor = "F"
 			rack = "R"
@@ -89,10 +95,10 @@ class Labels(list):
 			pallets = [floor, rack]
 			boxes = [shelf, mezannine]
 			building = "402"
-			maxAisle = 28 # There are no more than 28 aisles in the building.
-			minBay = 0
+			maxAisle = 28 # There are no more than 28 aisles in S and M locations.
+			minBay = 1 # There are a few exceptions that start at 0.
 			maxBay = 40 # there are never more than 40 bays on an aisle.
-			types = ["F", "M", "R", "S"] # The types of location at AF.
+			types = list("FMRS") # The types of location at AF.
 			slots = list("ABCDEFGH") # The highest slot letter encountered at AF.
 
 			for type in types: # Loop over all the location types.
@@ -103,8 +109,18 @@ class Labels(list):
 					maxBay = 18
 				elif type in boxes:
 					maxAisle=28
-				for aisle in xrange(0,maxAisle+1): # For each aisle loop over all the bays.
-					if type in boxes:
+					maxBay = 40
+				for aisle in xrange(0,maxAisle+1): # Loop over all the aisles of each type.
+					if type in pallets:
+						if aisle == 0: maxBay = 7
+						elif aisle in [6, 8]: maxBay = 14
+						elif aisle == 23: maxBay = 3
+						else: maxBay = 18
+						if aisle in [1, 22]: minBay = 0;
+						elif aisle in [11, 15, 16]: minBay = 5
+						elif aisle in [12, 13, 14]: minBay = 6
+						else: minBay = 1
+					elif type in boxes:
 						slots = list("ABCDEF")
 						minBay = 1
 						if aisle == 0:
@@ -119,6 +135,8 @@ class Labels(list):
 						if aisle == 27: slots = list("ABCD")
 						if aisle == 28: slots = list("ABC")
 					for bay in xrange(minBay, maxBay+1): # For each bay loop over all the levels.
+						if type == floor:
+							if bay == 10: continue
 						if type in boxes:
 							if bay == 0: continue
 							if type == "M" and aisle == 0: continue
