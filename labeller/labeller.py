@@ -109,6 +109,8 @@ class Labels(list):
 
 			# Loop over all the aisles.
 			for aisle in xrange(1,maxAisle+1):
+				# The conditions before the start of the inner loop can set
+				# the starting and ending bays on an aisle.
 				# Aisles 1 and 2 stop at bay 32.
 				if aisle < 3: maxBay = 32
 				# And aisles 50-70 stop at bay 25 and have levels A-H.
@@ -119,16 +121,30 @@ class Labels(list):
 					# Reset to defaults.
 					maxBay = 40
 					maxLevel = "E"
-				for bay in xrange(1,maxBay+1): # For each aisle loop over all the bays.
-					for level in xrange(ord("A"), ord(maxLevel)+1): # For each bay loop over all the levels.
-						for slot in xrange(1, maxSlot+1): # For each level of each bay on each aisle loop over both slots.
-							if (bay == 20 or bay == 33) and level < ord("C"): # There are floor level tunnels at bays 20 and 33 that are 2 levels high.
-								continue
-							l = Label(aisle=aisle, bay=bay, level=chr(level), slot=slot, building=building)
-							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
-								continue
+				# For each aisle loop over all the bays.
+				for bay in xrange(1,maxBay+1):
+					# For each bay loop over all the levels.
+					for level in xrange(ord("A"), ord(maxLevel)+1):
+						# For each level of each bay on each aisle loop over both slots.
+						for slot in xrange(1, maxSlot+1):
+							# There are floor level tunnels at bays 20 and 33
+							# that are 2 levels high.
+							if (bay == 20 or bay == 33) and level < ord("C"): continue
+							# Build the label.
+							l = Label(
+								aisle=aisle,
+								bay=bay,
+								level=chr(level),
+								slot=slot,
+								building=building
+							)
+							# If we have an expression that doesn't match we
+							# do not add the label to the list.
+							if ("regexp" in locals()) and\
+								(regexp.search(str(l)) == None): continue
 							self.append(l)
 
+		# Apply the conditions for the AF building.
 		if building in ("AF", "402"):
 			floor = "F"
 			rack = "R"
@@ -137,32 +153,54 @@ class Labels(list):
 			pallets = [floor, rack]
 			boxes = [shelf, mezannine]
 			building = "402"
-			maxAisle = 28 # There are no more than 28 aisles in S and M locations.
-			minBay = 1 # There are a few exceptions that start at 0.
-			maxBay = 40 # there are never more than 40 bays on an aisle.
-			types = list("FMRS") # The types of location at AF.
-			slots = list("ABCDEFGH") # The highest slot letter encountered at AF.
+			# There are no more than 28 aisles in S and M locations.
+			maxAisle = 28
+			# There are a few exceptions that start at 0, so we need a
+			# variable minimum.
+			minBay = 1 
+			# there are never more than 40 bays on an aisle.
+			maxBay = 40
+			# The types of location at AF.
+			types = [floor, mezzanine, shelf, rac,]
+			# List of possible slot letters at AF.
+			slots = list("ABCDEFGH")
 
-			for type in types: # Loop over all the location types.
-				if type == floor: # Floor locations only have slots A and B.
+			# Loop over all the location types.
+			for type in types:
+				# Coditions that apply to any type of location go here. The
+				# conditions become more specific within the inner loops.
+				if type == floor:
+					# Floor locations only have slots A and B.
 					slots = list("AB")
 				if type in pallets:
+					# Aisle 23 and bay 18 is the highest pallet aisle and bay
+					# possible at AF.
 					maxAisle = 23
 					maxBay = 18
 				elif type in boxes:
+					# Aisle 28 bay 40 is the highest box only aisle and bay.
 					maxAisle=28
 					maxBay = 40
-				for aisle in xrange(0,maxAisle+1): # Loop over all the aisles of each type.
+				for aisle in xrange(0,maxAisle+1):
+					# Loop over all the aisles of each type. Here we apply
+					# conditions specific to a given aisle.
 					if type in pallets:
+						# Pallet locations on aisle 0 have only 7 bays. There
+						# are gaps in this aisle, but the bay numbers don't skip them.
 						if aisle == 0: maxBay = 7
-						elif aisle in [6, 8]: maxBay = 14
+						# Aisles 6-8 stop at bay 14 to leave space for loading
+						# and unloading trucks.
+						elif aisle in [6, 7, 8]: maxBay = 14
+						# Aisle 23 only has 3 bays with unnumbered gaps.
 						elif aisle == 23: maxBay = 3
+						# Fall back to a default of 18 bays per aisle.
 						else: maxBay = 18
+						# Now we set conditions for the minimum bay numbers.
 						if aisle in [1, 22]: minBay = 0;
 						elif aisle in [11, 15, 16]: minBay = 5
 						elif aisle in [12, 13, 14]: minBay = 6
 						else: minBay = 1
-						if aisle == 22 and type == floor: slots = list("ABCD")
+						if aisle in [21, 22] and type == floor: slots = list("ABCD")
 					elif type in boxes:
 						slots = list("ABCDEF")
 						minBay = 1
