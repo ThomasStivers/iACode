@@ -1,8 +1,10 @@
 # labeler.py
 # Copyright (C) 2017 Thomas Stivers
 
+import os
 import re
 import argparse
+import barcode
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -34,7 +36,6 @@ class Label:
 		"""Diferent buildings have different format templates for their labels.
 		
 		This function returns a human readable string customized for the building."""
-		import textwrap
 		# the convention for the Taylor building is "TLR-AISLE-BAY-LEVEL-SLOT".
 		if self.building == "TLR":
 			template = "\
@@ -86,6 +87,7 @@ class Labels(list):
 		return "\n".join(lines)
 
 	def generate(self, building, expression=None):
+	
 		"""Creates the list of labels for a building.
 			
 			If expression is included labels are generated only if the labels
@@ -161,7 +163,7 @@ class Labels(list):
 			# there are never more than 40 bays on an aisle.
 			maxBay = 40
 			# The types of location at AF.
-			types = [floor, mezzanine, shelf, rac,]
+			types = [floor, mezannine, shelf, rack]
 			# List of possible slot letters at AF.
 			slots = list("ABCDEFGH")
 
@@ -200,33 +202,57 @@ class Labels(list):
 						elif aisle in [11, 15, 16]: minBay = 5
 						elif aisle in [12, 13, 14]: minBay = 6
 						else: minBay = 1
+						# Aisles 21 and 22 have double-height picking locations.
 						if aisle in [21, 22] and type == floor: slots = list("ABCD")
+					# Conditions that apply to the shelves and mezannine.
 					elif type in boxes:
+						# Most of the selves have 3 levels with 2 slots on each.
 						slots = list("ABCDEF")
+						# There are no 0 bays in the shelves.
 						minBay = 1
-						if aisle == 0:
-							maxBay = 23
-							slots = list("ABCD")
-						elif aisle in [1, 2]: maxBay = 25
+						# But aisle 3 does start at bay 4.
+						if aisle == 3: minBay = 4
+						# Aisle 0 is double length and folded in half allowing
+						# for 23 bays.
+						if aisle == 0: maxBay = 23
+						# Aisles 1-2 go from the office to the loading dock.
+						elif aisle in [1, 2]: maxBay = 24
+						# Aisles 3-16 stop before the LTL shipping area.
 						elif aisle in xrange(3, 16): maxBay = 11
+						# Aisles 17-18 are the same length as aisles 1-2.
 						if aisle in [17, 18]: maxBay = 25
+						# Aisle 19 is a stand-alone aisle at the end of the offices.
 						elif aisle == 19: maxBay = 12
+						# For historical reasons aisles 20-27 do not exist.
 						elif aisle in xrange(20, 27): continue
+						# Aisles 27-28 extend the full length of the building.
 						elif aisle in [27, 28]: maxBay = 40
-						if aisle == 27: slots = list("ABCD")
-						if aisle == 28: slots = list("ABC")
-					for bay in xrange(minBay, maxBay+1): # For each bay loop over all the levels.
+						# Aisles 0 and 27 hold coats and only have 4 slots per
+						# bay.
+						if aisle in [0, 27]: slots = list("ABCD")
+						# Only in the mezannine aisle 28 has double-wide shelf
+						# locations allowing for only 3 slots per bay.
+						if aisle == 28 and type == mezannine: slots = list("ABC")
+					# Loop over all the bays on each aisle.
+					for bay in xrange(minBay, maxBay+1):
 						if type in pallets:
-							if bay == 10 and (type == floor or aisle == 22): continue
+							# There is a floor-level tunnel at bay 10 for
+							# aisles 1-21.
+							if bay == 10 and (type == floor or aisle != 22): continue
 							if bay == 17: continue
 						if type in boxes:
 							if bay == 0: continue
 							if type == "M" and aisle == 0: continue
-						for slot in slots: # For each type of each bay on each aisle loop over all slots.
+						# For each type of each bay on each aisle loop over all slots.
+						for slot in slots:
+							# Finally we set the label.
 							l = Label(type=type, aisle=aisle, bay=bay, slot=slot, building=building)
-							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
-								continue
+							# If the label doesn't match the regular expression we will skip it.
+							if ("regexp" in locals())\
+								and (regexp.search(str(l)) == None): continue
+							self.append(l)
 
+		# Conditions for the MC building.
 		if building in ("MC", "225"):
 			floor = list("DF")
 			rack = list("RU")
@@ -287,8 +313,47 @@ class Labels(list):
 								continue
 							self.append(l)
 
+	def makeBarcodes(self):
+		"""Generate an HTML table which links to all the locations as barcode images."""
+		import xml.etree.ElementTree as et
+		from xml.dom import minidom
+		
+		html = et.Element("html")
+		head = et.SubElement(html, "head")
+		title = et.SubElement(head, "title")
+		title.text = "Barcode Labels for {0}".format(self[0].building)
+		style = et.SubElement(head, "style", {"type": "text/css"})
+		style.text = """
+			td img {
+			  width: 3.5in;
+			  height: 1.75in;
+			  text-align: center;
+			  vertical-align: center;
+			}
+		"""
+		body = et.SubElement(html, "body")
+		h1 = et.SubElement(body, "h1")
+		h1.text = title.text
+		table = et.SubElement(body, "table")
+		i = 0
+		for label in self:
+			code = barcode.Code39(str(label), add_checksum=False)
+			fileName = os.path.join("barcodes", str(label))
+			# if not os.path.exists(fileName):
+			code.save(fileName, {"font_size": 16})
+			if i % self.columns == 0:
+				tr = et.SubElement(table, "tr")
+			td = et.SubElement(tr, "td")
+			img = et.SubElement(td, "img",
+				{"src": fileName + ".svg",
+				"alt": str(label)
+			})
+			i += 1
+		return minidom.parseString(et.tostring(html)).toprettyxml(indent="  ")
+
 if __name__ == "__main__":
 	args = parser.parse_args()
 	labels = Labels(int(args.columns))
 	labels.generate(args.building, args.expression)
-	print labels
+	barcodes = labels.makeBarcodes()
+	print barcodes
