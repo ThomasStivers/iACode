@@ -1,6 +1,21 @@
-# labeler.py
-# Copyright (C) 2017 Thomas Stivers
+# -*- coding: utf-8 -*-
+#
+# Copyright © 2017 Thomas Stivers
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
 import os
 import re
 import argparse
@@ -16,6 +31,9 @@ parser.add_argument(
 parser.add_argument(
 	"-e", "--expression", default=None,
 	help="A regular expression to limit the labels returned.")
+parser.add_argument(
+	"-f", "--filename", default=None,
+	help="Write the output to a file.")
 parser.add_argument(
 	"-V", "--version", action="version", version="2017.10")
 
@@ -87,7 +105,6 @@ class Labels(list):
 		return "\n".join(lines)
 
 	def generate(self, building, expression=None):
-	
 		"""Creates the list of labels for a building.
 			
 			If expression is included labels are generated only if the labels
@@ -267,8 +284,10 @@ class Labels(list):
 			types = list("DFRSU") # The types of location at MC.
 			slots = list("ABCDEF") # The highest slot letter encountered at MC.
 
-			for type in types: # Loop over all the location types.
-				if type in list("FR"): # Floor locations only have slots A and B.
+			# Loop over all the location types.
+			for type in types:
+				# Floor locations only have slots A and B.
+				if type in list("FR"):
 					slots = list("AB")
 					minAisle = 1
 					maxAisle = 72
@@ -279,8 +298,8 @@ class Labels(list):
 				elif type in boxes:
 					maxAisle=22
 					maxBay = 18
-				for aisle in xrange(minAisle,maxAisle+1): # Loop over all the aisles of each type.
-					# print type, aisle, minAisle, maxAisle
+				# Loop over all the aisles of each type.
+				for aisle in xrange(minAisle,maxAisle+1):
 					if type in pallets:
 						if aisle == 0: continue
 						if type == "D":
@@ -301,13 +320,15 @@ class Labels(list):
 					elif type in boxes:
 						slots = list("ABCDEF")
 						minBay = 1
-					for bay in xrange(minBay, maxBay+1): # For each bay loop over all the levels.
+					# For each aisle loop over all the bays.
+					for bay in xrange(minBay, maxBay+1):
 						if type == "F":
 							if bay in [8, 25, 33, 47]: continue
 						if type == "R": slots = list("ABCDEFGH")
 						if type in boxes:
 							if bay == 0: continue
-						for slot in slots: # For each type of each bay on each aisle loop over all slots.
+						# For each type of each bay on each aisle loop over all slots.
+						for slot in slots:
 							l = Label(type=type, aisle=aisle, bay=bay, slot=slot, building=building)
 							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
 								continue
@@ -317,12 +338,14 @@ class Labels(list):
 		"""Generate an HTML table which links to all the locations as barcode images."""
 		import xml.etree.ElementTree as et
 		from xml.dom import minidom
-		
+
+		# We must build all the mark-up around our table of images.
 		html = et.Element("html")
 		head = et.SubElement(html, "head")
 		title = et.SubElement(head, "title")
 		title.text = "Barcode Labels for {0}".format(self[0].building)
 		style = et.SubElement(head, "style", {"type": "text/css"})
+		# Make the table cells fit on 4X2 labels with a snippet of stylesheet.
 		style.text = """
 			td img {
 			  width: 3.5in;
@@ -337,18 +360,28 @@ class Labels(list):
 		table = et.SubElement(body, "table")
 		i = 0
 		for label in self:
+			# Generate the barcode.Code39 object.
 			code = barcode.Code39(str(label), add_checksum=False)
+			# All images will be generated in a barcodes directory under the
+			# working directory.
 			fileName = os.path.join("barcodes", str(label))
-			# if not os.path.exists(fileName):
-			code.save(fileName, {"font_size": 16})
+			# We'll only write the images to disk if they don't already exist.
+			if not os.path.exists(fileName):
+				# Save the image as an svg file with large print.
+				code.save(fileName, {"font_size": 16})
+			# Limit the table width to self.columns.
 			if i % self.columns == 0:
 				tr = et.SubElement(table, "tr")
 			td = et.SubElement(tr, "td")
+			# We pass a dictionary when creating the image specifying the src and alt
+			# attributes.
 			img = et.SubElement(td, "img",
-				{"src": fileName + ".svg",
+				{"src": os.path.altsep.join(os.path.split(fileName + ".svg")),
 				"alt": str(label)
 			})
+			# Mustn't forget to increment the counter for the columnizing.
 			i += 1
+		# Return a pretty printed version of the html.
 		return minidom.parseString(et.tostring(html)).toprettyxml(indent="  ")
 
 if __name__ == "__main__":
@@ -356,4 +389,8 @@ if __name__ == "__main__":
 	labels = Labels(int(args.columns))
 	labels.generate(args.building, args.expression)
 	barcodes = labels.makeBarcodes()
-	print barcodes
+	if args.filename != None and not os.path.exists(args.filename):
+		print barcodes
+	else:
+		open(args.filename, "w").write(barcodes)
+		sys.stderr.write("{0} barcodes printed.".format(len(labels)))
