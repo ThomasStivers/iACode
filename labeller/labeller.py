@@ -20,6 +20,8 @@ import os
 import re
 import argparse
 import barcode
+import wx
+import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -36,6 +38,15 @@ parser.add_argument(
 	help="Write the output to a file.")
 parser.add_argument(
 	"-V", "--version", action="version", version="2017.10")
+
+class Timer():
+	def __enter__(self):
+		self.start = time.clock()
+		return self
+	
+	def __exit__(self, *args):
+		self.end = time.clock()
+		self.interval = self.end - self.start
 
 class Label:
 	"""Represents a location label for a DS warehouse."""
@@ -333,8 +344,9 @@ class Labels(list):
 							if ("regexp" in locals()) and (regexp.search(str(l)) == None):
 								continue
 							self.append(l)
+		return len(self)
 
-	def makeBarcodes(self):
+	def makeBarcodes(self, progress):
 		"""Generate an HTML table which links to all the locations as barcode images."""
 		import xml.etree.ElementTree as et
 		from xml.dom import minidom
@@ -366,7 +378,7 @@ class Labels(list):
 			# working directory.
 			fileName = os.path.join("barcodes", str(label))
 			# We'll only write the images to disk if they don't already exist.
-			if not os.path.exists(fileName):
+			if not os.path.exists(fileName + ".svg"):
 				# Save the image as an svg file with large print.
 				code.save(fileName, {"font_size": 16})
 			# Limit the table width to self.columns.
@@ -381,16 +393,114 @@ class Labels(list):
 			})
 			# Mustn't forget to increment the counter for the columnizing.
 			i += 1
+			progress.Update(i)
+			progress.Show()
 		# Return a pretty printed version of the html.
 		return minidom.parseString(et.tostring(html)).toprettyxml(indent="  ")
 
+class LabelFrame(wx.Frame):
+	"""The main frame for the GUI."""
+
+	def __init__(self, parent, title):
+		"""Initialize the GUI after calling the parent constructor."""
+		super(LabelFrame, self).__init__(parent, title=title, size=(600,400))
+		self.labels = Labels(int(args.columns))
+		# Setup the controls in the frame.
+		self.initUI()
+		# Show it in the center of the screen.
+		self.Center()
+		# Now actually show the frame.
+		self.Show(True)
+
+	def initUI(self):
+		"""Setup the GUI for the program."""
+		
+		# Build the menu bar.
+		menuBar = wx.MenuBar()
+		fileMenu = wx.Menu()
+		fileMenuExport = fileMenu.Append(wx.ID_ANY, "&Export", "Export barcodes")
+		fileMenuQuit = fileMenu.Append(wx.ID_EXIT, "E&xit", "Exit Application")
+		menuBar.Append(fileMenu, "&File")
+		# Bind events to the menu.
+		self.Bind(wx.EVT_MENU, self.onQuit, fileMenuQuit)
+		self.Bind(wx.EVT_MENU, self.onExport, fileMenuExport)
+		self.SetMenuBar(menuBar)
+		
+		# Place controls on a vertical sizer.
+		mainSizer = wx.BoxSizer(wx.VERTICAL)
+		# But controls related to the expression and options should be horizontal.
+		expressionSizer = wx.BoxSizer(wx.HORIZONTAL)
+		optionSizer = wx.BoxSizer(wx.HORIZONTAL)
+		# The panel allows for tabbing between controls.
+		panel = wx.Panel(self)
+		# Choices for the buildings dropdown box.
+		buildingChoices = ["TLR", "225", "402"]
+		self.cbBuilding = wx.Choice(panel, choices=buildingChoices, name="Building")
+		self.cbBuilding.SetSelection(self.cbBuilding.FindString(args.building))
+		self.cbBuilding.SetLabel("&Building")
+		self.txtColumns = wx.TextCtrl(panel, name="Columns")
+		self.txtColumns.SetLabel("&Columns")
+		self.txtExpression = wx.TextCtrl(
+			panel, name="Expression"
+		)
+		self.txtExpression.SetLabel("&Expression")
+		self.btnGenerate = wx.Button(panel, wx.ID_ANY, "&Generate")
+		self.Bind(wx.EVT_BUTTON, self.onGenerate, self.btnGenerate)
+		expressionSizer.Add(wx.StaticText(panel, label="Expression:"))
+		expressionSizer.Add(self.txtExpression)
+		expressionSizer.Add(self.btnGenerate)
+		optionSizer.Add(wx.StaticText(panel, label="Building:"))
+		optionSizer.Add(self.cbBuilding)
+		optionSizer.Add(wx.StaticText(panel, label="Columns:"))
+		optionSizer.Add(self.txtColumns)
+		mainSizer.Add(optionSizer)
+		mainSizer.Add(expressionSizer)
+		self.SetSizer(mainSizer)
+		self.SetAutoLayout(1)
+		mainSizer.Fit(self)
+		self.statusBar = self.CreateStatusBar()
+
+	def onQuit(self, e):
+		"""Exit the application."""
+		self.Close()
+
+	def onGenerate(self, e):
+		"""Generate the label strings in memory."""
+		expression = self.txtExpression.GetLineText(0)
+		if expression != args.expression:
+			args.expression = expression
+		building = self.cbBuilding.GetString(self.cbBuilding.GetSelection())
+		if building != args.building:
+			args.building = building
+		self.statusBar.SetStatusText("Generating labels...")
+		with Timer() as t:
+			numLabels = self.labels.generate(args.building, args.expression)
+		self.statusBar.SetStatusText("{0} labels generated in {1:.03f} sec.".\
+			format(numLabels, t.interval))
+
+	def onExport(self, e):
+		"""Export barcodes for generated labels to HTML."""
+		progressDialog = wx.ProgressDialog(
+			"Exporting labels to HTML.", "Exporting...", parent=self,
+			maximum=len(self.labels),
+			style=wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT)
+		if args.filename == None: args.filename = ""
+		with wx.FileDialog(self, "Export to HTML file",
+			defaultFile=args.filename,
+			wildcard="HTML Files (*.html)|*.html",
+			style=wx.FD_SAVE) as fileDialog:
+			if fileDialog.ShowModal() == wx.ID_CANCEL: return
+			with open(fileDialog.GetPath(), "w") as file:
+				with Timer() as t:
+					progressDialog.Show()
+					file.write(self.labels.makeBarcodes(progressDialog))
+				self.statusBar.SetStatusText("Labels exported in {0:.03f} sec.".\
+					format(t.interval))
+
+
 if __name__ == "__main__":
 	args = parser.parse_args()
-	labels = Labels(int(args.columns))
-	labels.generate(args.building, args.expression)
-	barcodes = labels.makeBarcodes()
-	if args.filename != None and not os.path.exists(args.filename):
-		print barcodes
-	else:
-		open(args.filename, "w").write(barcodes)
-		sys.stderr.write("{0} barcodes printed.".format(len(labels)))
+	app = wx.App(False)
+	# This frame shows itself in its constructor.
+	frame = LabelFrame(None, "Warehouse Labeller")
+	app.MainLoop()

@@ -1,1 +1,5 @@
 *.pyc
+labeller/barcodes/*
+labeller/labels.csv
+labels.csv
+labeller/labels.html
